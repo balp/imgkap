@@ -6,6 +6,6 @@ add_subdirectory(freeimage)
 
 # clang++ -I../freeimage/Source/ -o imgkap imgkap.c -lFreeImage_static -L../freeimage/build_a/lib/ -lpng -lz
 
-add_executable(imgkap imgkap.c)
+add_executable(imgkap imgkap.c imgkap.h imgkap_main.c)
 set_property(TARGET imgkap PROPERTY CXX_STANDARD 14)
 target_link_libraries(imgkap FreeImage_static png z)
