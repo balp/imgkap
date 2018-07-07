@@ -7,7 +7,6 @@
  *    imgkap.c - Convert kap a file from/to a image file and kml to kap
  */
 
-#define VERS   "1.15"
 
 #include <stdint.h>
 #include <math.h>
@@ -20,58 +19,12 @@
 
 #include <FreeImage.h>
 
-/* color type and mask */
-
-typedef union
-{
-    RGBQUAD  q;
-    uint32_t p;
-} Color32;
-
-#define RGBMASK 0x00FFFFFF
+#include "imgkap.h"
 
 
-/* --- Copy this part in header for use imgkap functions in programs and define LIBIMGKAP*/
+static const double WGSinvf = 298.257223563; /* WGS84 1/f */
+static const double WGSexentrik = 0.081819; /* e = 1/WGSinvf; e = sqrt(2*e -e*e) ;*/
 
-#define METTERS     0
-#define FATHOMS     1
-#define FEET        2
-
-#define NORMAL      0
-#define OLDKAP      1
-
-#define COLOR_NONE  1
-#define COLOR_IMG   2
-#define COLOR_MAP   3
-#define COLOR_KAP   4
-
-#define FIF_KAP     1024
-#define FIF_NO1     1025
-#define FIF_TXT     1026
-#define FIF_KML     1027
-
-
-int imgtokap(int typein,char *filein, double lat0, double lon0, int pixpos0x, int pixpos0y, double lat1, double lon1, int pixpos1x, int pixpos1y, int optkap,int color,char *title, int units, char *sd, int optionwgs84, char *optframe, char *fileout, char *gd, char *pr);
-int imgheadertokap(int typein,char *filein,int typeheader,int optkap,int color,char *title,char *fileheader,char *fileout);
-int kaptoimg(int typein,char *filein,int typeheader,char *fileheader,int typeout,char *fileout,char *optionpal);
-
-int findfiletype(char *file);
-int writeimgkap(FILE *out,FIBITMAP **bitmap,int optkap,int colors,Color32 *pal,uint16_t widthin,uint16_t heightin,uint16_t widthout,uint16_t heightout);
-
-int bsb_uncompress_row(int typein, FILE *in, uint8_t *buf_out, uint16_t bits_in,uint16_t bits_out,uint16_t width);
-int bsb_compress_row(const uint8_t *buf_in, uint8_t *buf_out, uint16_t bits_out, uint16_t line, uint16_t widthin,uint16_t widthout);
-
-/* --- End copy */
-
-
-static const double WGSinvf                           = 298.257223563;       /* WGS84 1/f */
-static const double WGSexentrik                       = 0.081819;             /* e = 1/WGSinvf; e = sqrt(2*e -e*e) ;*/
-
-struct structlistoption
-{
-    char const *name;
-    int val;
-} ;
 
 struct structlistoption imagetype[] =
 {
@@ -91,7 +44,8 @@ struct structlistoption listoptcolor[] =
     {NULL,COLOR_NONE}
 } ;
 
-int findoptlist(struct structlistoption *liste,char *name)
+int findoptlist(struct structlistoption *liste,
+                char *name)
 {
     while (liste->name != NULL)
     {
@@ -111,7 +65,10 @@ int findfiletype(char *file)
     return findoptlist(imagetype,s);
 }
 
-static double postod(double lat0, double lon0, double lat1, double lon1)
+static double postod(double lat0,
+                     double lon0,
+                     double lat1,
+                     double lon1)
 {
     double x,v,w;
 
@@ -217,7 +174,8 @@ typedef struct shistogram
 #define HistInc(h,l) (histogram *)(((char *)h)+HistSize(l))
 #define HistIndex(h,p,l) (histogram *)((char *)h+HistSize(l)*HistIndex2(p,l))
 
-static histogram *HistAddColor (histogram *h, Color32 pixel )
+static histogram *HistAddColor (histogram *h,
+                                Color32 pixel )
 {
     char level;
 
@@ -243,7 +201,8 @@ static histogram *HistAddColor (histogram *h, Color32 pixel )
     return h;
 }
 
-static int HistGetColorNum (histogram *h, Color32 pixel)
+static int HistGetColorNum (histogram *h,
+                            Color32 pixel)
 {
     char level;
 
@@ -263,7 +222,8 @@ static int HistGetColorNum (histogram *h, Color32 pixel)
 
 #define HistColorsCount(h) HistColorsCountLevel(h,6)
 
-static int32_t HistColorsCountLevel (histogram *h,int level)
+static int32_t HistColorsCountLevel (histogram *h,
+                                     int level)
 {
     int i;
     uint32_t count = 0;
@@ -304,7 +264,8 @@ typedef struct
 
 } reduce;
 
-static inline int HistDist(Color32 a, Color32 b)
+static inline int HistDist(Color32 a,
+                           Color32 b)
 {
    int c,r;
 
@@ -320,7 +281,11 @@ static inline int HistDist(Color32 a, Color32 b)
    return sqrt(r);
 }
 
-static int HistReduceDist(reduce *r, histogram *h, histogram *e, int cote, int level)
+static int HistReduceDist(reduce *r,
+                          histogram *h,
+                          histogram *e,
+                          int cote,
+                          int level)
 {
     int i;
     int used = 1;
@@ -377,7 +342,9 @@ static int HistReduceDist(reduce *r, histogram *h, histogram *e, int cote, int l
     return used;
 }
 
-static void HistReduceLevel(reduce *r, histogram *h, int level)
+static void HistReduceLevel(reduce *r,
+                            histogram *h,
+                            int level)
 {
     int i;
 
@@ -455,7 +422,9 @@ static void HistReduceLevel(reduce *r, histogram *h, int level)
 
 }
 
-static int HistReduce(histogram *h, int colorsin, int colorsout)
+static int HistReduce(histogram *h,
+                      int colorsin,
+                      int colorsout)
 {
     reduce r;
 
@@ -481,7 +450,10 @@ static int HistReduce(histogram *h, int colorsin, int colorsout)
 
 /*--------------- reduce end -------------*/
 
-static int _HistGetList(histogram *h,helem **e,int nbcolors,char level)
+static int _HistGetList(histogram *h,
+                        helem **e,
+                        int nbcolors,
+                        char level)
 {
     int i;
     int nb;
@@ -504,7 +476,15 @@ static int _HistGetList(histogram *h,helem **e,int nbcolors,char level)
 }
 
 
-static int HistGetPalette(uint8_t *colorskap,uint8_t *colors,Color32 *palette,histogram *h,int nbcolors, int nb, int optcolors, Color32 *imgpal,int maxpal)
+static int HistGetPalette(uint8_t *colorskap,
+                          uint8_t *colors,
+                          Color32 *palette,
+                          histogram *h,
+                          int nbcolors,
+                          int nb,
+                          int optcolors,
+                          Color32 *imgpal,
+                          int maxpal)
 {
     int i,j;
     helem *t,*e[128];
@@ -657,7 +637,8 @@ typedef struct shsv
 
 //* si size < 0 lit jusqu'a \n (elimine \r) et convertie NO1 int r = (c - 9) & 0xFF; */
 
-static inline int fgetkapc(int typein, FILE *in)
+static inline int fgetkapc(int typein,
+                           FILE *in)
 {
     int c;
 
@@ -667,7 +648,10 @@ static inline int fgetkapc(int typein, FILE *in)
     return c;
 }
 
-static int fgetkaps(char *s, int size, FILE *in, int typein)
+static int fgetkaps(char *s,
+                    int size,
+                    FILE *in,
+                    int typein)
 {
     int i,c;
 
@@ -697,7 +681,9 @@ static int fgetkaps(char *s, int size, FILE *in, int typein)
 
 /* function read and write kap index */
 
-static int bsb_write_index(FILE *fp, uint16_t height, uint32_t *index)
+static int bsb_write_index(FILE *fp,
+                           uint16_t height,
+                           uint32_t *index)
 {
     uint8_t l;
 
@@ -718,7 +704,9 @@ static int bsb_write_index(FILE *fp, uint16_t height, uint32_t *index)
         return 1;
 }
 
-static uint32_t *bsb_read_index(int typein,FILE *in,uint16_t height)
+static uint32_t *bsb_read_index(int typein,
+                                FILE *in,
+                                uint16_t height)
 {
     uint32_t l,end;
     uint32_t *index;
@@ -749,7 +737,10 @@ static uint32_t *bsb_read_index(int typein,FILE *in,uint16_t height)
 
 /* bsb compress number, not value 0 at first write */
 
-static uint16_t bsb_compress_nb(uint8_t *p, uint16_t nb, uint8_t pixel, uint16_t max)
+static uint16_t bsb_compress_nb(uint8_t *p,
+                                uint16_t nb,
+                                uint8_t pixel,
+                                uint16_t max)
 {
     uint16_t count = 0;
 
@@ -768,7 +759,12 @@ static uint16_t bsb_compress_nb(uint8_t *p, uint16_t nb, uint8_t pixel, uint16_t
 
 /* write line bsb */
 
-int bsb_compress_row(const uint8_t *buf_in, uint8_t *buf_out, uint16_t bits_out, uint16_t line, uint16_t widthin, uint16_t widthout)
+int bsb_compress_row(const uint8_t *buf_in,
+                     uint8_t *buf_out,
+                     uint16_t bits_out,
+                     uint16_t line,
+                     uint16_t widthin,
+                     uint16_t widthout)
 {
     uint16_t    ibuf,run_length ;
     uint16_t    ipixelin,ipixelout,xout;
@@ -817,7 +813,11 @@ int bsb_compress_row(const uint8_t *buf_in, uint8_t *buf_out, uint16_t bits_out,
 
 /* bsb uncompress number */
 
-static uint16_t bsb_uncompress_nb(int typein,FILE *in, uint8_t *pixel, uint8_t decin, uint8_t maxin)
+static uint16_t bsb_uncompress_nb(int typein,
+                                  FILE *in,
+                                  uint8_t *pixel,
+                                  uint8_t decin,
+                                  uint8_t maxin)
 {
     uint8_t c;
     uint16_t count;
@@ -837,7 +837,12 @@ static uint16_t bsb_uncompress_nb(int typein,FILE *in, uint8_t *pixel, uint8_t d
 
 /* read line bsb */
 
-int bsb_uncompress_row(int typein, FILE *in, uint8_t *buf_out, uint16_t bits_in,uint16_t bits_out, uint16_t width)
+int bsb_uncompress_row(int typein,
+                       FILE *in,
+                       uint8_t *buf_out,
+                       uint16_t bits_in,
+                       uint16_t bits_out,
+                       uint16_t width)
 {
     uint16_t    count;
     uint8_t     pixel;
@@ -900,7 +905,12 @@ int bsb_uncompress_row(int typein, FILE *in, uint8_t *buf_out, uint16_t bits_in,
     return 0;
 }
 
-static void read_line(uint8_t *in, uint16_t bits, int width, uint8_t *colors, histogram *hist, uint8_t *out)
+static void read_line(uint8_t *in,
+                      uint16_t bits,
+                      int width,
+                      uint8_t *colors,
+                      histogram *hist,
+                      uint8_t *out)
 {
     int i;
     uint8_t c = 0;
@@ -948,7 +958,12 @@ static void read_line(uint8_t *in, uint16_t bits, int width, uint8_t *colors, hi
 }
 
 
-static uint32_t GetHistogram(FIBITMAP *bitmap,uint32_t bits,uint16_t width,uint16_t height,Color32 *pal,histogram *hist)
+static uint32_t GetHistogram(FIBITMAP *bitmap,
+                             uint32_t bits,
+                             uint16_t width,
+                             uint16_t height,
+                             Color32 *pal,
+                             histogram *hist)
 {
     uint32_t    i,j;
     Color32     cur;
@@ -1034,7 +1049,15 @@ static uint32_t GetHistogram(FIBITMAP *bitmap,uint32_t bits,uint16_t width,uint1
 
 static const char *colortype[] = {"RGB","DAY","DSK","NGT","NGR","GRY","PRC","PRG"};
 
-int writeimgkap(FILE *out,FIBITMAP **bitmap,int optkap, int optcolors, Color32 *palette, uint16_t widthin,uint16_t heightin, uint16_t widthout, uint16_t heightout)
+int writeimgkap(FILE *out,
+                FIBITMAP **bitmap,
+                int optkap,
+                int optcolors,
+                Color32 *palette,
+                uint16_t widthin,
+                uint16_t heightin,
+                uint16_t widthout,
+                uint16_t heightout)
 {
     uint16_t    i,cpt,len,cur,last;
     int         num_colors;
@@ -1167,7 +1190,19 @@ int writeimgkap(FILE *out,FIBITMAP **bitmap,int optkap, int optcolors, Color32 *
 }
 
 
-static int readkapheader(int typein,FILE *in,int typeout, FILE *out, char *date,char *title,int optcolor,int *widthout, int *heightout,  double *rx, double *ry, int *depth, RGBQUAD *palette)
+static int readkapheader(int typein,
+                         FILE *in,
+                         int typeout,
+                         FILE *out,
+                         char *date,
+                         char *title,
+                         int optcolor,
+                         int *widthout,
+                         int *heightout,
+                         double *rx,
+                         double *ry,
+                         int *depth,
+                         RGBQUAD *palette)
 
 {
     char    *s;
@@ -1278,7 +1313,13 @@ static int readkapheader(int typein,FILE *in,int typeout, FILE *out, char *date,
     return result;
 }
 
-int kaptoimg(int typein,char *filein,int typeheader,char *fileheader,int typeout, char *fileout, char *optionpal)
+int kaptoimg(int typein,
+             char *filein,
+             int typeheader,
+             char *fileheader,
+             int typeout,
+             char *fileout,
+             char *optionpal)
 
 {
     int result;
@@ -1440,7 +1481,14 @@ int kaptoimg(int typein,char *filein,int typeheader,char *fileheader,int typeout
 }
 
 
-int imgheadertokap(int typein,char *filein,int typeheader, int optkap, int color, char *title, char *fileheader,char *fileout)
+int imgheadertokap(int typein,
+                   char *filein,
+                   int typeheader,
+                   int optkap,
+                   int color,
+                   char *title,
+                   char *fileheader,
+                   char *fileout)
 {
     int         widthin,heightin,widthout,heightout;
     int         bits_in,bits_out;
@@ -1592,35 +1640,66 @@ int imgheadertokap(int typein,char *filein,int typeheader, int optkap, int color
     return result;
 }
 
-int imgtokap(int typein,char *filein, double lat0, double lon0, int pixpos0x, int pixpos0y, double lat1, double lon1, int pixpos1x, int pixpos1y, int optkap, int color, char *title,int units, char *sd,int optionwgs84, char *optframe, char *fileout, char *gd, char *pr)
+int imgtokap(int typein,
+             char *filein,
+             double lat0,
+             double lon0,
+             int pixpos0x,
+             int pixpos0y,
+             double lat1,
+             double lon1,
+             int pixpos1x,
+             int pixpos1y,
+             int optkap,
+             int color,
+             char *title,
+             int units,
+             char *sd,
+             int optionwgs84,
+             char *optframe,
+             char *fileout,
+             char *gd,
+             char *pr)
 {
-    uint16_t    dpi,widthout,heightout,widthoutr,heightoutr;
-    uint32_t    widthin,heightin,widthinr,heightinr;
-    double      scale;
-    double      lx,ly,dx,dy ;
-    char        datej[20];
-    int         result;
-    const char  *sunits;
-    FIBITMAP    *bitmap;
+    uint16_t dpi;
+    uint16_t widthout;
+    uint16_t heightout;
+    uint16_t widthoutr;
+    uint16_t heightoutr;
+    uint32_t widthin;
+    uint32_t heightin;
+    uint32_t widthinr;
+    uint32_t heightinr;
+    double scale;
+    double lx;
+    double ly;
+    double dx;
+    double dy;
+    char datej[20];
+    int  result;
+    const char *sunits;
+    FIBITMAP *bitmap;
     FREE_IMAGE_TYPE type;
-    RGBQUAD     palette[256*8];
-    char        *filenameNU;
-    double      londeg = 0;
-    double      latdeg = 0;
-    double      lat0loc = lat0;
-    double      lat1loc = lat1;
-    double      lon0loc = lon0;
-    double      lon1loc = lon1;
-    double      lon1locr, lon0locr, lat1locr, lat0locr;
-    uint16_t    pixpos0xr,pixpos1xr,pixpos0yr,pixpos1yr;
-    int         numxf = 0;
-    int         xf[12];
-    int         yf[12];
-    int         i,ply = 0;
-    double      plylat[12];
-    double      plylon[12];
+    RGBQUAD palette[256*8];
+    char  *filenameNU;
+    double londeg = 0;
+    double latdeg = 0;
+    double lat0loc = lat0;
+    double lat1loc = lat1;
+    double lon0loc = lon0;
+    double lon1loc = lon1;
+    uint16_t pixpos0xr;
+    uint16_t pixpos1xr;
+    uint16_t pixpos0yr;
+    uint16_t pixpos1yr;
+    int numxf = 0;
+    int xf[12];
+    int yf[12];
+    int i,ply = 0;
+    double plylat[12];
+    double plylon[12];
 
-    FILE        *out;
+    FILE *out;
 
     switch(units) {
     case METTERS: sunits = "METERS";  break;
@@ -1937,243 +2016,3 @@ int imgtokap(int typein,char *filein, double lat0, double lon0, int pixpos0x, in
 
     return result;
 }
-
-typedef struct sxml
-{
-    struct sxml *child;
-    struct sxml *next;
-    char tag[1];
-} mxml;
-
-static int mxmlreadtag(FILE *in, char *buftag)
-{
-    int c;
-    int end = 0;
-    int endtag = 0;
-    int i = 0;
-
-    while ((c = getc(in)) != EOF)
-        if (strchr(" \t\r\n",c) == NULL) break;
-
-    if (c == EOF) return -1;
-
-    if (c == '<')
-    {
-        endtag = 1;
-        c = getc(in);
-        if (strchr("?!/",c) != NULL)
-        {
-            end = 1;
-            c = getc(in);
-        }
-    }
-
-    if (c == EOF) return -1;
-
-    do
-    {
-        if (endtag && (c == '>')) break;
-        else if (c == '<')
-        {
-            ungetc(c,in);
-            break;
-        }
-        buftag[i++] = c;
-
-        if (i > 1024)
-            return -1;
-
-    } while ((c = getc(in)) != EOF) ;
-
-    while ((i > 0) && (strchr(" \t\r\n",buftag[i-1]) != NULL)) i--;
-
-    buftag[i] = 0;
-
-    if (end) return 1;
-    if (endtag) return 2;
-    return 0;
-}
-
-static int mistag(char *tag, const char *s)
-{
-    while (*s)
-    {
-        if (!*tag || (*s != *tag)) return 0;
-        s++;
-        tag++;
-    }
-    if (!*tag || (strchr(" \t\r\n",*tag) != NULL)) return 1;
-    return 0;
-}
-
-static mxml *mxmlread(FILE *in, mxml *parent, char *buftag)
-{
-    int r;
-    mxml *x , *cur , *first;
-
-    x = cur = first = 0 ;
-
-    while ((r = mxmlreadtag(in,buftag)) >= 0)
-    {
-        if (parent && mistag(parent->tag,buftag)) return first;
-
-        x = (mxml *)myalloc(sizeof(mxml)+strlen(buftag)+1);
-        if (x == NULL)
-        {
-            fprintf(stderr,"ERROR - Intern malloc\n");
-            return first;
-        }
-        if (!first) first = x;
-        if (cur) cur->next = x;
-        cur = x;
-
-        x->child = 0;
-        x->next = 0;
-        strcpy(x->tag,buftag);
-
-        if (!r) break;
-        if (r > 1) x->child = mxmlread(in,x,buftag);
-    }
-    return first;
-}
-
-
-static mxml *mxmlfindtag(mxml *first,const char *tag)
-{
-    while (first)
-    {
-        if (mistag(first->tag,tag)) break;
-        first = first->next;
-    }
-    return first;
-}
-
-#define mxmlfree(x) myfree()
-
-static int readkml(char *filein,double *lat0, double *lon0, double *lat1, double *lon1, char *title)
-{
-    int         result;
-    mxml        *kml,*ground,*cur;
-    FILE        *in;
-    char        *s;
-    char        buftag[1024];
-
-    in = fopen(filein, "rb");
-    if (in == NULL)
-    {
-        fprintf(stderr,"ERROR - Can't open KML file %s\n",filein);
-        return 2;
-    }
-
-    if (*filein)
-    {
-        s = filein + strlen(filein) - 1;
-        while ((s >= filein) && (strchr("/\\",*s) == NULL)) s--;
-         s[1] = 0;
-    }
-
-    kml = mxmlread(in,0,buftag);
-    fclose(in);
-
-    if (kml == NULL)
-    {
-        fprintf(stderr,"ERROR - Not XML KML file %s\n",filein);
-        return 2;
-    }
-
-    ground = mxmlfindtag(kml,"kml");
-
-    result = 2;
-    while (ground)
-    {
-        ground = mxmlfindtag(ground->child,"GroundOverlay");
-        if (!ground || ground->next)
-        {
-            fprintf(stderr,"ERROR - KML no GroundOverlay or more one\n");
-            break;
-        }
-        cur = mxmlfindtag(ground->child,"name");
-        if (!cur || !cur->child)
-        {
-            fprintf(stderr,"ERROR - KML no Name\n");
-            break;
-        }
-        if (!*title)
-            strcpy(title,cur->child->tag);
-
-        cur = mxmlfindtag(ground->child,"Icon");
-        if (!cur || !cur->child)
-        {
-            fprintf(stderr,"ERROR - KML no Icon\n");
-            break;
-        }
-        cur = mxmlfindtag(cur->child,"href");
-        if (!cur || !cur->child)
-        {
-            fprintf(stderr,"ERROR - KML no href\n");
-            break;
-        }
-        strcat(filein,cur->child->tag);
-
-#if (defined(_WIN32) || defined(__WIN32__))
-        s = filein + strlen(filein);
-        while (*s)
-        {
-            if (*s == '/') *s = '\\';
-            s++;
-        }
-#endif
-
-        cur = mxmlfindtag(ground->child,"LatLonBox");
-        if (!cur || !cur->child)
-        {
-            fprintf(stderr,"ERROR - KML no LatLonBox\n");
-            break;
-        }
-        result = 3;
-        ground = cur->child;
-
-        cur = mxmlfindtag(ground,"rotation");
-        if (cur && cur->child)
-        {
-            *lat0 = strtod(cur->child->tag,&s);
-            if (*s || (*lat0 > 0.5))
-            {
-                result = 4;
-                fprintf(stderr,"ERROR - KML rotation is not accepted\n");
-                break;
-            }
-        }
-        cur = mxmlfindtag(ground,"north");
-        if (!cur || !cur->child) break;
-        *lat0 = strtod(cur->child->tag,&s);
-        if (*s) break;
-
-        cur = mxmlfindtag(ground,"south");
-        if (!cur || !cur->child) break;
-        *lat1 = strtod(cur->child->tag,&s);
-        if (*s) break;
-
-        cur = mxmlfindtag(ground,"west");
-        if (!cur || !cur->child) break;
-        *lon0 = strtod(cur->child->tag,&s);
-        if (*s) break;
-
-        cur = mxmlfindtag(ground,"east");
-        if (!cur || !cur->child) break;
-        *lon1 = strtod(cur->child->tag,&s);
-        if (*s) break;
-
-        result = 0;
-        break;
-    }
-
-    mxmlfree(kml);
-
-    if (result == 3) fprintf(stderr,"ERROR - KML no Lat Lon\n");
-    return result;
-}
-
-#ifndef LIBIMGKAP
-
-#endif

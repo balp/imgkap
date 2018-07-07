@@ -10,7 +10,7 @@
 #define IMGKAP_H
 #include <FreeImage.h>
 
-#define VERS   "1.11"
+#define VERS   "1.16"
 
 
 /* color type and mask */
