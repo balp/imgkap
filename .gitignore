@@ -1,2 +1,8 @@
 /imgkap.exe
 /imgkap
+build_alpine_3.8/
+build_docker.sh/
+build_ubuntu_16_04/
+build_ubuntu_16_04_clang/
+build_ubuntu_18_04/
+build_ubuntu_18_04_clang/
