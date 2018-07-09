@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.11.1) # Just the current tested version
+cmake_minimum_required (VERSION 3.10.2) # Just the current tested version
 project (imgkap)
 set(FREEIMAGE_BUILD_STATIC 1)
 
